@@ -1,0 +1,148 @@
+---
+title: "Tarea entregable - Práctica 8"
+subtitle: "Modelos Jerárquicos Bayesianos"
+author: "Zuri Montalar Mendoza"
+date: "02/06/2020"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+<!-- ,warning=FALSE, error=FALSE -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<div style="text-align: justify">
+
+```{r include=FALSE,message=FALSE}
+setwd("~/BIOESTADÍSTICA máster/IV. Modelización avanzada/Modelos jerárquicos bayesianos/Tareas entregables MJB/P8 MJB")
+```
+
+**En la tarea anterior ajustaste un modelo con tendencia cuadrática y efectos aleatorios Normales independientes (apartado 1). Considera ahora el mismo modelo pero cambiando los efectos aleatorios independientes por otros de estructura autorregresiva (Normal) de primer orden de media cero ¿Qué modelo te parece más oportuno, el de efectos aleatorios independientes, o éste? Representa los datos junto a su valor esperado e intervalo de predicción al 95%.**
+
+  
+```{r message=FALSE,warning=FALSE}
+load("Tabla4.Rdata")
+library(R2WinBUGS)
+```
+
+
+```{r include=FALSE,message=FALSE}
+set.seed(13)
+```
+
+```{r include=FALSE,message=FALSE}
+# guardamos los resultados
+#save(Resultados,file="Resultados_v2.RData")
+
+# cargamos los datos:
+load("Resultados_v2.Rdata")
+```
+
+De la misma manera que en la práctica anterior, para solventar los problemas que suponía tener estadísticos R de Gelman-Rubin elevados y muy pocas simulaciones efectivas, definimos la variable *día* como *dia=(1:48-mean(1:48))/10*, además de decidir realizar un gran número de simulaciones con un periodo de burn-in elevado. También realizamos varias pruebas con el fin de encontrar valores iniciales adecuados para tratar que las cadenas converjan.
+
+```{r eval=FALSE,echo=TRUE}
+# Creamos la matriz de variables de día y día^2, con la primera
+# columna de 1's para interceptos
+dia<-(1:dim(Tabla)[1]-mean(1:dim(Tabla)[1]))/10
+dias<-matrix(cbind(rep(1,dim(Tabla)[1]),dia,dia^2),ncol=3) 
+```
+
+```{r eval=FALSE,echo=TRUE}
+modelo<-function() {
+  for (i in 1:n) {
+    # Verosimilitud
+    Fallecidos[i]~dpois(lambda[i])
+    log(lambda[i])<-inprod(beta[],Dias[i,])+efecto.a[i]
+    # Predictiva para las observaciones del banco de datos
+    Fall.pred[i]~dpois(lambda[i])
+  }
+  # Efecto aleatorio
+  for (i in 2:n) {
+    x.a[i]<-phi*efecto.a[i-1]
+    efecto.a[i]~dnorm(x.a[i],tau.a)
+  }
+  # Distribuciones iniciales
+  efecto.a[1]~dflat()
+  for (j in 1:3) {
+    beta[j]~dflat()
+  }
+  tau.a<-pow(sd,-2)
+  sd~dunif(0,100)
+  phi~dflat()
+}
+datos<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Dias=dias)
+iniciales<-function() {
+  list(beta=c(rnorm(1,8,0.5),rnorm(2,0,0.1)),efecto.a=rnorm(48,0,0.1),
+       sd=runif(1,0,1),phi= rnorm(1,0,0.1))
+}
+parametros<-c("beta","phi","sd","efecto.a","Fall.pred")
+
+
+Resultados<-bugs(model=modelo,data=datos,inits=iniciales,param=parametros,n.iter=100000,
+    n.burnin=35000,bugs.directory="C:/Program Files (x86)/WinBUGS14",clearWD=TRUE)
+```
+
+
+```{r }
+round(Resultados$summary[1:53,],3)
+Resultados$DIC
+```
+
+En este modelo hemos obtenido un DIC de 556.102. En el modelo de la tarea anterior en el que también ajustábamos los días con tendencia cuadrática, pero los efectos aleatorios eran Normales independientes en lugar de autorregresivos, teníamos un DIC de 556.914. En principio, el tener ahora un DIC menor sería indicio de que se trata de un mejor modelo. Sin embargo, esa diferencia de DIC's es muy pequeña, de sólo unos decimales, por lo que podemos considerar que ambos modelos son igual de buenos.
+
+Que no haya diferencia en los modelos tal vez se deba a que ya estamos recogiendo el efecto de los días considerando las variables de *día* y *día^2*, y por tanto no es necesario indicar con los efectos aleatorios de estructura autorregresiva que lo que ocurre un día influye en lo que ocurre el día siguiente.
+
+<!-- Aún con ello, pensamos que conceptualmente puede ser más oportuno el incluir los efectos aleatorios de estructura autoregresiva, pues parece sensato considerar que lo que pase un día influye en lo que pasará el día siguiente. -->
+
+$$~~$$
+A continuación, representamos los datos junto a su valor esperado e intervalo de predicción al 95%.
+
+
+```{r}
+# Representación gráfica
+plot(rep(Tabla$fallecidos[1],3),Resultados$summary[54,c(1,3,7)],
+     pch=20,col=c(1,2,2),xlim=c(700,4700),ylim=c(0,5000),xlab="valores reales",
+     ylab="valores esperados",main= "Nº de fallecidos")
+abline(0,1,col=4,lwd=2)
+for (i in 2:48) {
+  points(rep(Tabla$fallecidos[i],3),Resultados$summary[54+i-1,c(1,3,7)],
+    pch=20,col=c(1,2,2))
+}
+```
+
+En el gráfico anterior vemos en negro los valores esperados (las medias de cada una de las distribuciones predictivas) frente a la cantidad de fallecidos real, y en rojo están representados los intervalos de predicción al 95%. Vemos que no sólo todos los valores reales están comprendidos en el intervalo de predicción correspondiente, sino que además los valores esperados son prácticamente iguales a los reales, teniendo que todos ellos coinciden aproximadamente con la línea azul, que representa la igualdad entre los valores reales y los esperados, y por tanto una predicción perfecta.
+
+
+
+
+
+```{r warning=FALSE, error=FALSE,fig.width=12,fig.height=5,fig.align="center"}
+plot(1:Resultados$n.keep,Resultados$sims.array[,1,1],type="l",xlab="Iteración",
+     main="beta[1]",col="red") # en rojo cadena 1
+lines(1:Resultados$n.keep,Resultados$sims.array[,2,1],col="blue") # en azul cadena 2
+lines(1:Resultados$n.keep,Resultados$sims.array[,3,1],col="green") # en verde cadena 3
+
+plot(1:Resultados$n.keep,Resultados$sims.array[,1,2],type="l",xlab="Iteración",
+     main="beta[2]",col="red") # en rojo cadena 1
+lines(1:Resultados$n.keep,Resultados$sims.array[,2,2],col="blue") # en azul cadena 2
+lines(1:Resultados$n.keep,Resultados$sims.array[,3,2],col="green") # en verde cadena 3
+
+plot(1:Resultados$n.keep,Resultados$sims.array[,1,3],type="l",xlab="Iteración",
+     main="beta[3]",col="red") # en rojo cadena 1
+lines(1:Resultados$n.keep,Resultados$sims.array[,2,3],col="blue") # en azul cadena 2
+lines(1:Resultados$n.keep,Resultados$sims.array[,3,3],col="green") # en verde cadena 3
+```
+
+
+
+
+
+
+
+
+
+
+
+

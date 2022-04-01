@@ -1,0 +1,349 @@
+---
+title: "Tarea entregable - Práctica 5"
+subtitle: "Modelos Jerárquicos Bayesianos"
+author: "Zuri Montalar Mendoza"
+date: "05/05/2020"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+<div style="text-align: justify">
+
+```{r include=FALSE,warning=FALSE, error=FALSE}
+setwd("~/BIOESTADÍSTICA máster/IV. Modelización avanzada/Modelos jerárquicos bayesianos/Tareas entregables MJB/P5 MJB")
+library(R2WinBUGS)
+set.seed(1)
+```
+
+
+**El archivo Tabla2.Rdata contiene información sanitaria sobre Covid-19 publicada por el Ministerio de Sanidad. Concretamente, el archivo anterior contiene para 36 días el número de casos confirmados de la enfermedad en España, los casos hospitalizados, ingresos en UCI y fallecidos por la enfermedad. El valor recogido en cada una de las variables es la suma de los 7 días anteriores para disminuir el efecto estacional del fin de semana sobre los datos.**
+
+```{r warning=FALSE, error=FALSE}
+load("Tabla2.Rdata")
+```
+
+
+## Ejercicio 1
+**Modeliza mediante un modelo de regresión lineal simple el número diario de fallecidos como función del número de casos confirmados observados cada día. Repite dicho modelo empleando como covariables, de forma separada, el número de casos hospitalizados y el número de ingresos en UCI. ¿Consideras que en todos los casos la variable explicativa que has empleado tiene un efecto ‘significativo’ sobre el número de defunciones observadas? cuantifica la probabilidad de que exista dicha relación ¿Qué variable crees que explica de mejor manera el número de defunciones diarias por Covid?**
+
+Número diario de fallecidos respecto al de casos confirmados:
+
+```{r warning=FALSE, error=FALSE}
+modelo1<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dnorm(mu[i],tau)
+    mu[i]<-beta0+beta1*Casos[i]
+  }
+  # distribuciones iniciales
+  beta0~dflat()
+  beta1~dflat()
+  tau~dgamma(0.01,0.01)
+  
+  p.beta0<-step(beta0)
+  p.beta1<-step(beta1)
+}
+datos1<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Casos=Tabla$casos)
+iniciales1<-function() {
+  list(beta0=10,beta1=.005,tau=0.000001)
+  list(beta0=25,beta1=.5,tau=0.0001)
+  list(beta0=30,beta1=.03,tau=0.001)
+}
+parametros1<-c("beta0","beta1","p.beta0","p.beta1")
+Resul1<-bugs(model=modelo1,data=datos1,inits=iniciales1,param=parametros1,n.iter=4000,
+    n.burnin=floor(4000*.1),n.chains=3,bugs.directory="C:/Program Files (x86)/WinBUGS14")
+
+```
+
+
+Número diario de fallecidos respecto al de casos hospitalizados:
+```{r warning=FALSE, error=FALSE}
+modelo2<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dnorm(mu[i],tau)
+    mu[i]<-beta0+beta1*Hospit[i]
+  }
+  # distribuciones iniciales
+  beta0~dflat()
+  beta1~dflat()
+  tau~dgamma(0.01,0.01)
+  
+  p.beta0<-step(beta0)
+  p.beta1<-step(beta1)
+}
+datos2<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Hospit=Tabla$hospitalizados)
+iniciales2<-function() {
+  list(beta0=10,beta1=.005,tau=0.000001)
+  list(beta0=25,beta1=.5,tau=0.0001)
+  list(beta0=30,beta1=.03,tau=0.001)
+}
+parametros2<-c("beta0","beta1","p.beta0","p.beta1")
+Resul2<-bugs(model=modelo2,data=datos2,inits=iniciales2,param=parametros2,n.iter=4000,
+    n.burnin=floor(4000*.1),n.chains=3,bugs.directory="C:/Program Files (x86)/WinBUGS14")
+
+```
+
+Número diario de fallecidos respecto al de ingresos en UCI:
+```{r warning=FALSE, error=FALSE}
+modelo3<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dnorm(mu[i],tau)
+    mu[i]<-beta0+beta1*UCI[i]
+  }
+  # distribuciones iniciales
+  beta0~dflat()
+  beta1~dflat()
+  tau~dgamma(0.01,0.01)
+  
+  p.beta0<-step(beta0)
+  p.beta1<-step(beta1)
+}
+datos3<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,UCI=Tabla$uci)
+iniciales3<-function() {
+  list(beta0=10,beta1=.005,tau=0.000001)
+  list(beta0=25,beta1=.5,tau=0.0001)
+  list(beta0=30,beta1=.03,tau=0.001)
+}
+parametros3<-c("beta0","beta1","p.beta0","p.beta1")
+Resul3<-bugs(model=modelo3,data=datos3,inits=iniciales3,param=parametros3,n.iter=4000,
+    n.burnin=floor(4000*.1),n.chains=3,bugs.directory="C:/Program Files (x86)/WinBUGS14")
+
+```
+
+
+```{r warning=FALSE, error=FALSE}
+round(Resul1$summary,3)
+Resul1$DIC
+round(Resul2$summary,3)
+Resul2$DIC
+round(Resul3$summary,3)
+Resul3$DIC
+```
+
+Si observamos el valor medio de p.beta1 para cada uno de los casos, vemos que el correspondiente al modelo del número diario de fallecidos por Covid-19 respecto al de casos confirmados es 0.969, muy cercano a 1, lo que implica que hay una asociación positiva entre la variable respuesta y la variable explicativa. Sin embargo, explicando el número de fallecidos con respecto al de casos hospitalizados y al de ingresos en UCI, los p.beta1 son 0.581 y 0.462, respectivamente, lo que indica que no hay una clara asociación entre esas variables explicativas y la la variable respuesta.
+
+Además, si comparamos el criterio de información deviance (DIC) de cada caso, vemos que los modelos con las variables (de forma separada) número de casos hospitalizados y número de ingresos en UCI tienen un DIC muy similar, de aproximadamente 586.5, mientras que el que considera como variable explicativa el número de casos confirmados es de 582.548. Esa diferencia entre DIC's es entonces de alrededor de 4, por lo que podríamos decir el ajuste con el modelo que usa la variable número de casos confirmados es mejor al de los otros dos casos (tiene menor DIC), explicando entonces mejor manera el número de defunciones diarias por esta enfermedad.
+
+Por tanto, de entre los tres modelos probados conseguimos un mejor ajuste con el que hemos llamado *modelo1*.
+
+## Ejercicio 2
+**Para el modelo que hayas considerado más oportuno en el apartado 1 incluye el resto de covariables consideradas en dicho apartado ¿Consideras oportuno incluir alguna de estas variables como covariable adicional en el modelo en presencia de la covariable que ya hubieras incluido originalmente?**
+
+Número diario de fallecidos respecto al número de casos confirmados y el de hospitalizados:
+
+```{r warning=FALSE, error=FALSE}
+modelo4<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dnorm(mu[i],tau)
+    mu[i]<-beta[1]+beta[2]*Casos[i]+beta[3]*Hospit[i]
+  }
+  # distribuciones iniciales
+  for (j in 1:3) {
+    beta[j]~dflat()
+  }
+  tau~dgamma(0.01,0.01)
+
+  # medidas de asociación
+  for (j in 1:3) {
+    p.beta[j]<-step(beta[j])
+  }
+}
+datos4<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Casos=Tabla$casos,
+             Hospit=Tabla$hospitalizados)
+iniciales4<-function() {
+  list(beta=c(50,1,1),tau=0.000001)
+  list(beta=c(10,.05,1.5),tau=0.0001)
+  list(beta=c(20,.5,.5),tau=0.001)
+}
+parametros4<-c("beta","p.beta")
+Resul4<-bugs(model=modelo4,data=datos4,inits=iniciales4,param=parametros4,n.iter=4000,
+    n.burnin=floor(4000*.1),n.chains=3,bugs.directory="C:/Program Files (x86)/WinBUGS14")
+
+```
+
+Número diario de fallecidos respecto al número de casos confirmados y el de ingresados en UCI:
+```{r warning=FALSE, error=FALSE}
+modelo5<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dnorm(mu[i],tau)
+    mu[i]<-beta[1]+beta[2]*Casos[i]+beta[3]*UCI[i]
+  }
+  # distribuciones iniciales
+  for (j in 1:3) {
+    beta[j]~dflat()
+  }
+  tau~dgamma(0.01,0.01)
+
+  # medidas de asociación
+  for (j in 1:3) {
+    p.beta[j]<-step(beta[j])
+  }
+}
+datos5<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Casos=Tabla$casos,UCI=Tabla$uci)
+iniciales5<-function() {
+  list(beta=c(50,1,1),tau=0.000001)
+  list(beta=c(10,.05,1.5),tau=0.0001)
+  list(beta=c(20,.5,.5),tau=0.001)
+}
+parametros5<-c("beta","p.beta")
+Resul5<-bugs(model=modelo5,data=datos5,inits=iniciales5,param=parametros5,n.iter=4000,
+    n.burnin=floor(4000*.1),n.chains=3,bugs.directory="C:/Program Files (x86)/WinBUGS14")
+
+```
+
+Número diario de fallecidos respecto al número de casos confirmados, el de hospitalizados y el de ingresados en UCI:
+```{r warning=FALSE, error=FALSE}
+modelo6<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dnorm(mu[i],tau)
+    mu[i]<-beta[1]+beta[2]*Casos[i]+beta[3]*Hospit[i]+beta[4]*UCI[i]
+  }
+  # distribuciones iniciales
+  for (j in 1:4) {
+    beta[j]~dflat()
+  }
+  tau~dgamma(0.01,0.01)
+
+  # medidas de asociación
+  for (j in 1:4) {
+    p.beta[j]<-step(beta[j])
+  }
+}
+datos6<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Casos=Tabla$casos,
+             Hospit=Tabla$hospitalizados,UCI=Tabla$uci)
+iniciales6<-function() {
+  list(beta=c(50,1,0,.5),tau=0.000001)
+  list(beta=c(10,.05,.05,0),tau=0.0001)
+  list(beta=c(20,.5,.5,.05),tau=0.001)
+}
+parametros6<-c("beta","p.beta")
+Resul6<-bugs(model=modelo6,data=datos6,inits=iniciales6,param=parametros6,n.iter=4000,
+    n.burnin=floor(4000*.1),n.chains=3,bugs.directory="C:/Program Files (x86)/WinBUGS14")
+
+```
+
+
+```{r warning=FALSE, error=FALSE}
+round(Resul4$summary,3)
+Resul4$DIC
+round(Resul5$summary,3)
+Resul5$DIC
+round(Resul6$summary,3)
+Resul6$DIC
+```
+
+Entre los tres nuevos modelos considerados, vemos que el que menor DIC tiene es el que considera como variable explicativa número ingresados en UCI, además del de confirmados. Este DIC es de 581.453 y, si lo comparamos con el que habíamos obtenido sin considerar la variable del número de ingresados (el *modelo1*), este era de 582.548. Por tanto, el ajuste teniendo en cuenta esa variable es un poco mejor que si no la consideramos, pese a que la diferencia entra ambos DIC's es inferior a 3 unidades y por tanto, leve. También observamos que se da asociación negativa entre el número ingresados en UCI y el número de fallecidos, teniendo el p.beta correspondiente de 0.056, muy próximo a 0.
+
+Entonces, de entre los modelos probados conseguimos un mejor ajuste con el que hemos llamado *modelo5*.
+
+
+## Ejercicio 3
+**Para la variable y modelo de regresión que hayas considerado más oportuno en el apartado 1 determina la distribución predictiva del número de defunciones en caso de que el valor máximo observado de la covariable hubiera sido un 10% superior de lo que realmente ha sido ¿Qué probabilidad consideras de que el número defunciones observadas en ese caso superara al máximo número de muertes observadas en toda la serie de defunciones?**
+
+Utilizamos el *modelo1*, que explica el número diario de fallecidos por Covid-19 respecto al de casos confirmados. Podemos obtener el valor de la covariable un 10% superior al valor máximo que ha tenido multiplicando el mismo por 1.1
+
+```{r}
+max(Tabla$casos)
+```
+
+
+```{r warning=FALSE, error=FALSE}
+modelo.pred<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dnorm(mu[i],tau)
+    mu[i]<-beta0+beta1*Casos[i]
+  }
+  # distribuciones iniciales
+  beta0~dflat()
+  beta1~dflat()
+  tau~dgamma(0.01,0.01)
+  
+  # predictiva
+  predictiva~dnorm(mu.post,tau)
+  mu.post<-beta0+beta1*1.1*59083
+}
+datos.pred<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Casos=Tabla$casos)
+iniciales.pred<-function() {
+  list(beta0=10,beta1=.005,tau=0.000001,predictiva=100)
+  list(beta0=25,beta1=.5,tau=0.0001,predictiva=1000)
+  list(beta0=30,beta1=.03,tau=0.001,predictiva=1500)
+}
+parametros.pred<-c("predictiva")
+Resul.pred<-bugs(model=modelo.pred,data=datos.pred,inits=iniciales.pred,
+    param=parametros.pred,n.iter=4000,n.burnin=floor(4000*.1),n.chains=3,
+    bugs.directory="C:/Program Files (x86)/WinBUGS14")
+```
+
+
+```{r warning=FALSE, error=FALSE}
+#prueba
+Tabla10<-Tabla
+Tabla10$casos[which.max(Tabla10$casos)]<-max(Tabla10$casos)*1.1
+modelo.pred<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dnorm(mu[i],tau)
+    mu[i]<-beta0+beta1*Casos[i]
+  }
+  # distribuciones iniciales
+  beta0~dflat()
+  beta1~dflat()
+  tau~dgamma(0.01,0.01)
+  
+  # predictiva
+  predictiva~dnorm(mu.post,tau)
+  mu.post<-beta0+beta1*mean(Casos[])
+}
+datos.pred<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Casos=Tabla10$casos)
+iniciales.pred<-function() {
+  list(beta0=10,beta1=.005,tau=0.000001,predictiva=100)
+  list(beta0=25,beta1=.5,tau=0.0001,predictiva=1000)
+  list(beta0=30,beta1=.03,tau=0.001,predictiva=1500)
+}
+parametros.pred<-c("predictiva")
+Resul.pred<-bugs(model=modelo.pred,data=datos.pred,inits=iniciales.pred,
+    param=parametros.pred,n.iter=4000,n.burnin=floor(4000*.1),n.chains=3,
+    bugs.directory="C:/Program Files (x86)/WinBUGS14")
+```
+
+
+
+```{r}
+round(Resul.pred$summary,3)
+# representación gráfica
+plot(density(Resul.pred$sims.list$predictiva),main="distribución predictiva",
+     xlab="nº fallecidos")
+```
+
+Para calcular la probabilidad de que el número defunciones observadas en ese caso sea mayor al máximo número de muertes observadas en toda la serie de defunciones, podemos promediar en cuántas ocasiones el valor obtenido en la predictiva es mayor al máximo número de muertes observadas (*max(Tabla$fallecidos)*):
+
+```{r warning=FALSE, error=FALSE}
+mean(Resul.pred$sims.list$predictiva>max(Tabla$fallecidos))
+```
+
+Dicha probabilidad es de aproximadamente 0.097, muy cercana a 0.
+
+
+<!-- ESTO ESTÁ MAL -->
+<!-- Para calcular la distribución predictiva, utilizamos el vector de interceptos del modelo ($\beta_0$) y lo sumamos al vector de coeficientes $\beta_1$, multiplicando estos últimos por el valor de la variable explicativa con el que queremos predecir la variable respuesta. En este caso, podemos obtener el valor de la covariable un 10% superior al valor máximo que ha tenido multiplicando el mismo por 1.1. Los vectores $\beta_0$ y $\beta_1$ se corresponden a las dos primeras columnas de la matriz *Resul1$sims.matrix*. -->
+
+<!-- ```{r warning=FALSE, error=FALSE,fig.width=12,fig.height=5,fig.align="center"} -->
+<!-- # distribución predictiva  -->
+<!-- predictiva<-Resul1$sims.matrix[,1]+max(Tabla$casos)*1.1*Resul1$sims.matrix[,2]  -->
+<!-- summary(predictiva) -->
+<!-- plot(density(predictiva),main="predictiva",xlab="nº fallecidos") # representación gráfica -->
+<!-- ``` -->
+
+
+
+
+
+
+

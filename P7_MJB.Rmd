@@ -1,0 +1,193 @@
+---
+title: "Tarea entregable - Práctica 7"
+subtitle: "Modelos Jerárquicos Bayesianos"
+author: "Zuri Montalar Mendoza"
+date: "24/5/2020"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+<!-- ,warning=FALSE, error=FALSE -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<div style="text-align: justify">
+
+```{r include=FALSE,message=FALSE}
+setwd("~/BIOESTADÍSTICA máster/IV. Modelización avanzada/Modelos jerárquicos bayesianos/Tareas entregables MJB/P7 MJB")
+library(R2WinBUGS)
+```
+
+**El archivo Tabla4.Rdata contiene información sanitaria sobre Covid-19 publicada por el Ministerio de Sanidad. Concretamente, el archivo anterior contiene para 48 días el número de casos confirmados de la enfermedad en España, los casos hospitalizados, ingresos en UCI y fallecidos por la enfermedad. El valor recogido en cada una de las variables es la suma de los 7 días anteriores para disminuir el efecto estacional del fin de semana sobre los datos.**
+
+```{r}
+load("Tabla4.Rdata")
+```
+
+## Ejercicio 1
+**Modeliza el número diario de fallecidos por Covid a lo largo del periodo de estudio considerado, como una regresión de Poisson. Utiliza la variable dia=1:48-mean(1:48) como covariable del modelo. Emplea dicha variable de forma cuadrática tal y como hiciste en la tarea anterior. Adicionalmente, como vimos que el ajuste de dicho modelo no era nada satisfactorio en términos predictivos añade en el término lineal un efecto aleatorio Normal que toma un valor distinto para cada día. El objetivo del efecto aleatorio será añadir flexibilidad adicional al modelo y así mejorar su comportamiento predictivo.**
+
+```{r include=FALSE,message=FALSE}
+set.seed(13)
+```
+
+Para intentar solventar los problemas que suponía tener estadísticos R de Gelman-Rubin elevados y muy pocas simulaciones efectivas, definimos la variable *día* como *dia=(1:48-mean(1:48))/10*, además de decidir realizar un gran número de simulaciones (18000), con un periodo de burn-in de 4500.
+
+```{r}
+# Creamos la variable día
+dia<-(1:dim(Tabla)[1]-mean(1:dim(Tabla)[1]))/10
+dia2<-dia^2
+```
+
+```{r}
+modelo1<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dpois(lambda[i])
+    log(lambda[i])<-beta[1]+beta[2]*Dia[i]+beta[3]*Dia2[i]+efecto.a[i]
+    # Efecto aleatorio
+    efecto.a[i]~dnorm(0,tau)
+  }
+  # Distribuciones iniciales
+  for (j in 1:3) {
+    beta[j]~dflat()
+  }
+  tau<-pow(sd,-2)
+  sd~dunif(0,100)
+}
+datos<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Dia=dia,Dia2=dia2)
+iniciales<-function() {
+  list(beta=c(rnorm(1),rnorm(2,0,0.1)),efecto.a=rnorm(48,0,0.1),sd=runif(1,0,1))
+}
+parametros<-c("beta","efecto.a")
+
+
+Resultados1<-bugs(model=modelo1,data=datos,inits=iniciales,param=parametros,n.iter=18000,
+    n.burnin=4500,bugs.directory="C:/Program Files (x86)/WinBUGS14",clearWD=TRUE)
+signif(Resultados1$summary,3)
+```
+
+
+<!-- ```{r warning=FALSE, error=FALSE,fig.width=12,fig.height=5,fig.align="center"} -->
+<!-- plot(1:Resultados1$n.keep,Resultados1$sims.array[,1,1],type="l",xlab="Iteración", -->
+<!--      main="beta[1]",col="red") # en rojo cadena 1 -->
+<!-- lines(1:Resultados1$n.keep,Resultados1$sims.array[,2,1],col="blue") # en azul cadena 2 -->
+<!-- lines(1:Resultados1$n.keep,Resultados1$sims.array[,3,1],col="green") # en verde cadena 3 -->
+
+<!-- plot(1:Resultados1$n.keep,Resultados1$sims.array[,1,2],type="l",xlab="Iteración", -->
+<!--      main="beta[2]",col="red") # en rojo cadena 1 -->
+<!-- lines(1:Resultados1$n.keep,Resultados1$sims.array[,2,2],col="blue") # en azul cadena 2 -->
+<!-- lines(1:Resultados1$n.keep,Resultados1$sims.array[,3,2],col="green") # en verde cadena 3 -->
+
+<!-- plot(1:Resultados1$n.keep,Resultados1$sims.array[,1,3],type="l",xlab="Iteración", -->
+<!--      main="beta[3]",col="red") # en rojo cadena 1 -->
+<!-- lines(1:Resultados1$n.keep,Resultados1$sims.array[,2,3],col="blue") # en azul cadena 2 -->
+<!-- lines(1:Resultados1$n.keep,Resultados1$sims.array[,3,3],col="green") # en verde cadena 3 -->
+<!-- ``` -->
+
+
+## Ejercicio 2
+**Tal y como hiciste en la tarea anterior, calcula la distribución predictiva de cada una de las observaciones que has utilizado para ajustar el modelo ¿Mejora en este caso, al incluir los efectos aleatorios, la frecuencia de observaciones incluidas en su intervalo de predicción?**
+
+```{r include=FALSE,message=FALSE}
+set.seed(13)
+```
+
+```{r}
+modelo2<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dpois(lambda[i])
+    log(lambda[i])<-beta[1]+beta[2]*Dia[i]+beta[3]*Dia2[i]+efecto.a[i]
+    # Efecto aleatorio
+    efecto.a[i]~dnorm(0,tau)
+    # Predictiva para las observaciones del banco de datos
+    Fall.pred[i]~dpois(lambda[i])
+  }
+  # Distribuciones iniciales
+  for (j in 1:3) {
+    beta[j]~dflat()
+  }
+  tau<-pow(sd,-2)
+  sd~dunif(0,100)
+}
+datos<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Dia=dia,Dia2=dia2)
+iniciales<-function() {
+  list(beta=c(rnorm(1),rnorm(2,0,0.1)),efecto.a=rnorm(48,0,0.1),sd=runif(1,0,1))
+}
+parametros<-c("Fall.pred")
+
+
+Resultados2<-bugs(model=modelo2,data=datos,inits=iniciales,param=parametros,n.iter=15000,
+    n.burnin=4000,bugs.directory="C:/Program Files (x86)/WinBUGS14",clearWD=TRUE)
+signif(Resultados2$summary,3)
+```
+
+
+Para obtener los intervalos predictivos, tenemos que la tercera y séptima columna de *Resul3$summary* son, respectivamente, los cuantiles 2.5% y 97.5%, por lo que conforman el intervalo al 95%. No consideramos la última fila, pues corresponde a *deviance*. 
+
+```{r}
+# Intervalos de predicción al 95%
+IP95<-Resultados2$summary[-dim(Resultados2$summary)[1],c(3,7)]
+```
+
+Calculamos la frecuencia con la que los intervalos de predicción contienen  los valores observados del banco de datos.
+
+```{r}
+# Frecuencia de observaciones incluidas en su IP
+mean(Tabla$fallecidos>IP95[,1] & Tabla$fallecidos<IP95[,2])
+```
+
+Tenemos que dicha frecuencia es de 1, por lo que todos nuestros intervalos de predicción contienen los valores observados, de modo que estamos acertando en todas las ocasiones. En comparación con la frecuencia obtenida en la práctica anterior, de 0.465, tenemos que el incluir los efectos aleatorios mejora muy considerablemente dicha frecuencia.
+
+## Ejercicio 3
+**Una vez incluidos los efectos aleatorios en el modelo del apartado 1, valora si sigue siendo necesario el ajuste cuadrático de la variable *día* dentro del modelo, o por el contrario el ajuste con sólo efectos aleatorios es igual de satisfactorio.**
+
+Para saber si sigue siendo necesario el ajuste cuadrático de la variable *día*, creamos un modelo sin incluir ese término en el modelo, y comparamos el DIC de este nuevo modelo con el del ejercicio 1.
+
+```{r include=FALSE,message=FALSE}
+set.seed(13)
+```
+
+
+```{r}
+modelo3<-function() {
+  # Verosimilitud
+  for (i in 1:n) {
+    Fallecidos[i]~dpois(lambda[i])
+    log(lambda[i])<-beta0+beta1*Dia[i]+efecto.a[i]
+    # Efecto aleatorio
+    efecto.a[i]~dnorm(0,tau)
+  }
+  # Distribuciones iniciales
+  beta0~dflat()
+  beta1~dflat()
+  tau<-pow(sd,-2)
+  sd~dunif(0,100)
+}
+datos<-list(n=dim(Tabla)[1],Fallecidos=Tabla$fallecidos,Dia=dia)
+iniciales<-function() {
+  list(beta0=rnorm(1),beta1=rnorm(1,0,0.1),efecto.a=rnorm(48,0,0.1),sd=runif(1,0,1))
+}
+parametros<-c("beta0","beta1")
+
+
+Resultados3<-bugs(model=modelo3,data=datos,inits=iniciales,param=parametros,n.iter=15000,
+    n.burnin=4000,bugs.directory="C:/Program Files (x86)/WinBUGS14",clearWD=TRUE)
+signif(Resultados3$summary,3)
+```
+
+
+```{r}
+# Comparación de DIC's
+Resultados1$DIC
+Resultados3$DIC
+```
+
+Tenemos que el DIC de los modelos considerando el ajuste cuadrático y no considerándolo son, respectivamente, 556.914 y 556.253. La diferencia entre ambos DIC's es muy pequeña, de sólo unos decimales, por lo que podemos considerar que ambos modelos son igual de buenos. Por tanto, preferimos quedarnos con el modelo más sencillo, que es el *modelo3*, el cual no incluye el ajuste cuadrático de la variable *día*, considerando por tanto que al incluir los efectos aleatorios ya no es necesario ese término cuadrático.
+
+
+
+
